@@ -15,7 +15,7 @@ Hướng dẫn:
 import os
 import time
 from typing import Any, Callable
-from openai import OpenAI
+
 from dotenv import load_dotenv
 
 # Nạp OPENAI_API_KEY từ file .env (copy .env.example thành .env và dán key vào)
@@ -36,6 +36,9 @@ PRICING_PER_1K_TOKENS = {
 # trong LAB_GUIDE.md) — tên model đổi qua .env. NVIDIA NIM: Phụ lục C.
 OPENAI_MODEL = os.getenv("LAB_MODEL", "gpt-4o")
 OPENAI_MINI_MODEL = os.getenv("LAB_MINI_MODEL", "gpt-4o-mini")
+# Nếu OPENAI_BASE_URL được đặt trong .env (ví dụ Gemini / NVIDIA NIM),
+# OpenAI SDK sẽ dùng endpoint đó thay vì mặc định api.openai.com.
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", None)
 
 
 # ===========================================================================
@@ -67,34 +70,21 @@ def call_openai(
 
     Gợi ý:
         from openai import OpenAI            # import BÊN TRONG hàm
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=OPENAI_BASE_URL)
         # đo thời gian bằng time.time() trước và sau lời gọi API
     """
     from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    start = time.time()
-
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=OPENAI_BASE_URL)
+    start = time.perf_counter()
     response = client.chat.completions.create(
         model=model,
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
+        messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
         top_p=top_p,
         max_tokens=max_tokens,
     )
-
-    end = time.time()
-
-    response_text = response.choices[0].message.content
-    latency = end - start
-
-    return response_text, latency
-    #       đo start/end time, trả về (response_text, latency)
-    # raise NotImplementedError("Implement call_openai")
+    latency = time.perf_counter() - start
+    return response.choices[0].message.content, latency
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +96,6 @@ def call_openai_mini(
     top_p: float = 0.9,
     max_tokens: int = 256,
 ) -> tuple[str, float]:
-    
     """
     Gọi API với model gpt-4o-mini — nhanh hơn và rẻ hơn.
 
@@ -117,12 +106,12 @@ def call_openai_mini(
         Tái sử dụng call_openai() với model=OPENAI_MINI_MODEL — 1 dòng code.
     """
     return call_openai(
-            prompt=prompt,
-            model=OPENAI_MINI_MODEL,
-            temperature=temperature,
-            top_p=top_p,
-            max_tokens=max_tokens,
-        )
+        prompt,
+        model=OPENAI_MINI_MODEL,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -149,26 +138,16 @@ def compare_models(prompt: str) -> dict:
          Dùng .get để lấy đúng giá model đang chạy — gpt-4o, gemini...;
          model không có trong bảng thì lấy giá gpt-4o làm tham chiếu)
     """
-    gpt4o_answer, gpt4o_time = call_openai(prompt)
-    mini_answer, mini_time = call_openai_mini(prompt)
-
-    pricing = PRICING_PER_1K_TOKENS.get(
-        OPENAI_MODEL,
-        PRICING_PER_1K_TOKENS["gpt-4o"]
-    )
-
-    gpt4o_cost = (
-        (len(gpt4o_answer.split()) / 0.75)
-        / 1000
-        * pricing["output"]
-    )
-
+    gpt4o_text, gpt4o_time = call_openai(prompt)
+    mini_text, mini_time = call_openai_mini(prompt)
+    pricing = PRICING_PER_1K_TOKENS.get(OPENAI_MODEL, PRICING_PER_1K_TOKENS["gpt-4o"])
+    cost = (len(gpt4o_text.split()) / 0.75) / 1000 * pricing["output"]
     return {
-        "gpt4o_answer": gpt4o_answer,
-        "mini_answer": mini_answer,
+        "gpt4o_answer": gpt4o_text,
+        "mini_answer": mini_text,
         "gpt4o_time": gpt4o_time,
         "mini_time": mini_time,
-        "gpt4o_cost": gpt4o_cost,
+        "gpt4o_cost": cost,
     }
 
 
@@ -205,10 +184,8 @@ def chat_with_system_prompt(
         ]
     """
     from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=OPENAI_BASE_URL)
     start = time.time()
-
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -218,20 +195,14 @@ def chat_with_system_prompt(
         temperature=temperature,
         max_tokens=max_tokens,
     )
-
-    end = time.time()
-
-    response_text = response.choices[0].message.content
-    latency = end - start
-
-    return response_text, latency
+    latency = time.time() - start
+    return response.choices[0].message.content, latency
 
 
 # ---------------------------------------------------------------------------
 # Task 2.2 — Đếm token bằng tiktoken
 # ---------------------------------------------------------------------------
 def count_tokens(text: str, model: str = OPENAI_MODEL) -> int:
-    
     """
     Đếm số token của một đoạn text bằng thư viện tiktoken.
 
@@ -252,11 +223,9 @@ def count_tokens(text: str, model: str = OPENAI_MODEL) -> int:
         max(1, len(text) // 4)   (trung bình 1 token ≈ 4 ký tự)
     """
     try:
-            import tiktoken
-    
-            enc = tiktoken.encoding_for_model(model)
-            return len(enc.encode(text))
-    
+        import tiktoken
+        enc = tiktoken.encoding_for_model(model)
+        return len(enc.encode(text))
     except Exception:
         return max(1, len(text) // 4)
 
@@ -265,7 +234,6 @@ def count_tokens(text: str, model: str = OPENAI_MODEL) -> int:
 # Task 2.3 — Ước tính chi phí chính xác
 # ---------------------------------------------------------------------------
 def estimate_cost(prompt: str, response: str, model: str = OPENAI_MODEL) -> dict:
-    
     """
     Tính chi phí một lượt gọi API dựa trên số token THẬT (đếm bằng
     count_tokens) và bảng giá PRICING_PER_1K_TOKENS — tách riêng chi phí
@@ -287,22 +255,15 @@ def estimate_cost(prompt: str, response: str, model: str = OPENAI_MODEL) -> dict
     """
     prompt_tokens = count_tokens(prompt, model)
     completion_tokens = count_tokens(response, model)
-
-    pricing = PRICING_PER_1K_TOKENS.get(
-        model,
-        PRICING_PER_1K_TOKENS["gpt-4o"]
-    )
-
+    pricing = PRICING_PER_1K_TOKENS.get(model, PRICING_PER_1K_TOKENS["gpt-4o"])
     prompt_cost = prompt_tokens / 1000 * pricing["input"]
     completion_cost = completion_tokens / 1000 * pricing["output"]
-    total_cost = prompt_cost + completion_cost
-
     return {
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "prompt_cost": prompt_cost,
         "completion_cost": completion_cost,
-        "total_cost": total_cost,
+        "total_cost": prompt_cost + completion_cost,
     }
 
 
@@ -314,7 +275,6 @@ def estimate_cost(prompt: str, response: str, model: str = OPENAI_MODEL) -> dict
 # Task 3.1 — Chatbot streaming có lịch sử hội thoại
 # ---------------------------------------------------------------------------
 def streaming_chatbot() -> None:
-    
     """
     Chatbot dòng lệnh tương tác dùng streaming.
 
@@ -332,49 +292,29 @@ def streaming_chatbot() -> None:
         - Sau mỗi lượt, thêm phản hồi assistant vào history.
         - Cắt history còn 4 lượt cuối (8 message): history = history[-8:]
     """
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
+    from openai import OpenAI
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=OPENAI_BASE_URL)
     history = []
-
     while True:
         user_msg = input("Bạn: ")
-
         if user_msg.strip().lower() in ("quit", "exit", "bye"):
-            print("Tạm biệt!")
             break
-
-        history.append(
-            {
-                "role": "user",
-                "content": user_msg,
-            }
-        )
-
+        history.append({"role": "user", "content": user_msg})
         stream = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=history,
             stream=True,
         )
-
-        assistant_response = ""
-
-        print("AI: ", end="")
-
+        reply = []
         for chunk in stream:
             delta = chunk.choices[0].delta.content or ""
             print(delta, end="", flush=True)
-            assistant_response += delta
-
+            reply.append(delta)
         print()
+        history.append({"role": "user", "content": user_msg})
+        history.append({"role": "assistant", "content": reply})
+        history = history[-6:]
 
-        history.append(
-            {
-                "role": "assistant",
-                "content": assistant_response,
-            }
-        )
-
-        history = history[-8:]
 
 # ---------------------------------------------------------------------------
 # Task 3.2 — Retry với exponential backoff
@@ -384,8 +324,6 @@ def retry_with_backoff(
     max_retries: int = 3,
     base_delay: float = 0.1,
 ) -> Any:
-
-    
     """
     Gọi fn(). Nếu ném exception, thử lại tối đa max_retries lần với
     exponential backoff (delay = base_delay * 2^attempt).
@@ -402,15 +340,12 @@ def retry_with_backoff(
         Exception cuối cùng của fn() sau khi hết số lần thử.
     """
     for attempt in range(max_retries + 1):
-            try:
-                return fn()
-    
-            except Exception:
-                if attempt == max_retries:
-                    raise
-    
-                delay = base_delay * (2 ** attempt)
-                time.sleep(delay)
+        try:
+            return fn()
+        except Exception:
+            if attempt == max_retries:
+                raise
+            time.sleep(base_delay * (2 ** attempt))
 
 
 # ===========================================================================
@@ -421,7 +356,6 @@ def run_assistant(
     get_input: Callable[[], str] = None,
     max_turns: int = None,
 ) -> dict:
-
     """
     Trợ lý CLI hoàn chỉnh — ghép mọi thứ bạn đã xây trong Part 1–3.
 
@@ -472,7 +406,7 @@ def run_assistant(
     if get_input is None:
         get_input = input
     from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), base_url=OPENAI_BASE_URL)
     history, turns, tokens_used, total_cost = [], 0, 0, 0.0
     while True:
         if max_turns is not None and turns >= max_turns:

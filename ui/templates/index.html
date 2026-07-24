@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity AI Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar for Stats -->
+        <aside class="sidebar glass-panel">
+            <div class="logo">
+                <i class="fa-solid fa-bolt text-accent"></i>
+                <h2>AI Assistant</h2>
+            </div>
+            
+            <div class="stats-container">
+                <h3>Session Status</h3>
+                
+                <div class="stat-card">
+                    <div class="stat-icon icon-blue"><i class="fa-solid fa-comments"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-label">Conversations</span>
+                        <span class="stat-value" id="stat-turns">0</span>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon icon-purple"><i class="fa-solid fa-microchip"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-label">Tokens Processed</span>
+                        <span class="stat-value" id="stat-tokens">0</span>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon icon-green"><i class="fa-solid fa-wallet"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-label">Estimated Cost</span>
+                        <span class="stat-value stat-highlight" id="stat-cost">$0.0000</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings">
+                <label for="model-select">Model:</label>
+                <div class="select-wrapper">
+                    <select id="model-select">
+                        <option value="{{ model_large }}" selected>{{ model_large }} (Large)</option>
+                        <option value="{{ model_mini }}">{{ model_mini }} (Mini)</option>
+                    </select>
+                    <i class="fa-solid fa-chevron-down select-icon"></i>
+                </div>
+
+                <label for="persona-input" style="margin-top: 18px;">System Persona:</label>
+                <textarea id="persona-input" rows="4">Bạn là trợ giảng thân thiện của khóa AI, trả lời ngắn gọn bằng tiếng Việt.</textarea>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-main">
+            <div class="chat-header glass-panel">
+                <div class="header-title">
+                    <i class="fa-solid fa-terminal"></i>
+                    <h1>Interactive Workspace</h1>
+                </div>
+                <div class="status-indicator">
+                    <span class="pulse"></span> Online
+                </div>
+            </div>
+            
+            <div class="chat-box" id="chat-box">
+                <!-- Messages will appear here -->
+                <div class="message assistant welcome-msg">
+                    <div class="avatar"><i class="fa-solid fa-robot"></i></div>
+                    <div class="bubble">Xin chào! Hệ thống đã sẵn sàng. Mình có thể giúp gì cho bạn hôm nay?</div>
+                </div>
+            </div>
+            
+            <div class="input-area glass-panel">
+                <form id="chat-form">
+                    <input type="text" id="message-input" placeholder="Type your message here..." autocomplete="off">
+                    <button type="submit" id="send-btn" title="Send Message">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
